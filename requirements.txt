@@ -1,0 +1,4 @@
+DateTime==4.3
+Flask[async]==2.0.2
+Flask-Cors==3.0.10
+web3==5.25.0
