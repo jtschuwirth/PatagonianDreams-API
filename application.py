@@ -135,23 +135,28 @@ def updateAllTreesData():
             if newOwner != currentOwner:
                 updateTreeData(i, newOwner)
 
+def getOfferData(offerId):
+    owner = MarketplaceContract.functions.offerOwner(offerId).call()
+    itemId = MarketplaceContract.functions.offerItemId(offerId).call()
+    originalAmount = MarketplaceContract.functions.offerOriginalAmount(offerId).call()
+    currentAmount = MarketplaceContract.functions.offerCurrentAmount(offerId).call()
+    price = MarketplaceContract.functions.offerPrice(offerId).call()
+    status = MarketplaceContract.functions.offerStatus(offerId).call()
+    return {"offerId": offerId, "owner": owner,"itemId": itemId,"originalAmount": originalAmount,"currentAmount": currentAmount,"price": price,"status": status,}
+
+
 def updateAllOffersData():
     offersQuantity = MarketplaceContract.functions.offersQuantity().call()
     for i in range(offersQuantity):
         try:
-            newOfferOwner = MarketplaceContract.functions.offerOwner(i).call()
-            newOfferItemId = MarketplaceContract.functions.offerItemId(i).call()
-            newOfferOriginalAmount = MarketplaceContract.functions.offerOriginalAmount(i).call()
-            newOfferCurrentAmount = MarketplaceContract.functions.offerCurrentAmount(i).call()
-            newOfferPrice = MarketplaceContract.functions.offerPrice(i).call()
-            newOfferStatus = MarketplaceContract.functions.offerStatus(i).call()
+            data = getOfferData(i)
         except:
             break
         exists = db.session.query(Offer.id).filter_by(id=i).first() is not None
         if exists == False:
-            addOfferData(i, newOfferOwner, newOfferItemId, newOfferOriginalAmount, newOfferCurrentAmount, newOfferPrice, newOfferStatus)
+            addOfferData(i, data["owner"], data["itemId"], data["originalAmount"], data["currentAmount"], data["price"], data["status"])
         else:
-            updateOfferData(i, newOfferOwner, newOfferItemId, newOfferOriginalAmount, newOfferCurrentAmount, newOfferPrice, newOfferStatus)
+            updateOfferData(i, data["owner"], data["itemId"], data["originalAmount"], data["currentAmount"], data["price"], data["status"])
 
 def handle_transfer(event):
     print(event)
@@ -162,14 +167,35 @@ def handle_transfer(event):
         addTreeData(treeId, newOwner)
     else:
         updateTreeData(treeId, newOwner)
-    print("event Handled, TreeId: ",treeId)
+    print("event Handled, TreeId: ", treeId)
+
+def handle_offer(event):
+    print(event)
+    offerId = event["args"]["offerId"]
+    owner = event["args"]["owner"]
+    itemId = event["args"]["itemId"]
+    originalAmount = event["args"]["originalAmount"]
+    currentAmount = event["args"]["currentAmount"]
+    price = event["args"]["price"]
+    status = event["args"]["status"]
+    exists = db.session.query(Offer.id).filter_by(id=offerId).first() is not None
+    if exists == False:
+        addOfferData(offerId, owner, itemId, originalAmount, currentAmount, price, status)
+    else:
+        updateOfferData(offerId, owner, itemId, originalAmount, currentAmount, price, status)
+    print("event Handled, offerId: ", offerId)
         
 def transferEvent():
     latestBlock = w3.eth.block_number
-    #print(latestBlock)
-    event_filter = TreeContract.events.Transfer.createFilter(fromBlock=latestBlock)
-    for event in event_filter.get_all_entries():
+    transfer_filter = TreeContract.events.Transfer.createFilter(fromBlock=latestBlock)
+    for event in transfer_filter.get_all_entries():
         handle_transfer(event)
+
+def offerEvent():
+    latestBlock = w3.eth.block_number
+    offerUpdated_filter = MarketplaceContract.events.OfferUpdated.createFilter(fromBlock=latestBlock)
+    for event in offerUpdated_filter.get_all_entries():
+        handle_offer(event)
 
 @app.route("/status", methods=['GET'])
 async def getStatus():
@@ -198,6 +224,7 @@ async def openOffers():
     return getOpenOffers()
 
 scheduler.add_job(func=transferEvent, trigger="interval", seconds=2)
+scheduler.add_job(func=offerEvent, trigger="interval", seconds=2)
 scheduler.start()
 
 atexit.register(lambda: scheduler.shutdown())
