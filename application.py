@@ -59,7 +59,7 @@ def addTreeData(treeId, newOwner):
     db.session.commit()
 
 def addOfferData(offerId, owner, itemId, originalAmount, currentAmount, price, status):
-    newOffer = Offer(id=offerId, owner=owner, itemId=itemId, originalAmount=originalAmount, currentAmount=currentAmount ,price=price, status=status)
+    newOffer = Offer(id=offerId, owner=owner, itemId=itemId, originalAmount=originalAmount, currentAmount=currentAmount ,price=price/10**18, status=status)
     db.session.add(newOffer)
     db.session.commit()
 
@@ -72,7 +72,7 @@ def updateOfferData(offerId, newOwner, newItemId, NewOriginalAmount, NewCurrentA
     Offer.query.filter_by(id=offerId).update(dict(itemId=newItemId))
     Offer.query.filter_by(id=offerId).update(dict(originalAmount=NewOriginalAmount))
     Offer.query.filter_by(id=offerId).update(dict(currentAmount=NewCurrentAmount))
-    Offer.query.filter_by(id=offerId).update(dict(price=newPrice))
+    Offer.query.filter_by(id=offerId).update(dict(price=newPrice/10**18))
     Offer.query.filter_by(id=offerId).update(dict(status=newStatus))
     db.session.commit()
 
