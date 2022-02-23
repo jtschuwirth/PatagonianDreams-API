@@ -23,7 +23,7 @@ TreeABI = TreeJson["abi"]
 TreeAddress = TreeJson["networks"]["2"]["address"]
 TreeContract = w3.eth.contract(address=TreeAddress, abi=TreeABI)
 
-MarketplaceJson = json.load(open("abi/Marketplace.json"))
+MarketplaceJson = json.load(open("abi/ERC1155Marketplace.json"))
 MarketplaceABI = MarketplaceJson["abi"]
 MarketplaceAddress = MarketplaceJson["networks"]["2"]["address"]
 MarketplaceContract = w3.eth.contract(address=MarketplaceAddress, abi=MarketplaceABI)
@@ -38,7 +38,7 @@ class Tree(db.Model):
 class Offer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     owner = db.Column(db.String(42), unique=False, nullable=False)
-    itemId = db.Column(db.Integer)
+    nftId = db.Column(db.Integer)
     originalAmount = db.Column(db.Integer)
     currentAmount = db.Column(db.Integer)
     price = db.Column(db.Integer)
@@ -58,8 +58,8 @@ def addTreeData(treeId, newOwner):
     db.session.add(newTree)
     db.session.commit()
 
-def addOfferData(offerId, owner, itemId, originalAmount, currentAmount, price, status):
-    newOffer = Offer(id=offerId, owner=owner, itemId=itemId, originalAmount=originalAmount, currentAmount=currentAmount ,price=price/10**18, status=status)
+def addOfferData(offerId, owner, nftId, originalAmount, currentAmount, price, status):
+    newOffer = Offer(id=offerId, owner=owner, nftId=nftId, originalAmount=originalAmount, currentAmount=currentAmount ,price=price/10**18, status=status)
     db.session.add(newOffer)
     db.session.commit()
 
@@ -67,9 +67,9 @@ def updateTreeData(treeId, newOwner):
     Tree.query.filter_by(id=treeId).update(dict(owner=newOwner))
     db.session.commit()
 
-def updateOfferData(offerId, newOwner, newItemId, NewOriginalAmount, NewCurrentAmount, newPrice, newStatus):
+def updateOfferData(offerId, newOwner, newNFTId, NewOriginalAmount, NewCurrentAmount, newPrice, newStatus):
     Offer.query.filter_by(id=offerId).update(dict(owner=newOwner))
-    Offer.query.filter_by(id=offerId).update(dict(itemId=newItemId))
+    Offer.query.filter_by(id=offerId).update(dict(nftId=newNFTId))
     Offer.query.filter_by(id=offerId).update(dict(originalAmount=NewOriginalAmount))
     Offer.query.filter_by(id=offerId).update(dict(currentAmount=NewCurrentAmount))
     Offer.query.filter_by(id=offerId).update(dict(price=newPrice/10**18))
@@ -108,20 +108,20 @@ def getOffersOf(address):
     result = {}
     if checkAddress(address) == False:
         return "Non Valid Address"
-    offers = db.session.query(Offer.id, Offer.owner, Offer.itemId, Offer.originalAmount, Offer.currentAmount, Offer.price, Offer.status).filter_by(owner=address)
+    offers = db.session.query(Offer.id, Offer.owner, Offer.nftId, Offer.originalAmount, Offer.currentAmount, Offer.price, Offer.status).filter_by(owner=address)
     for offer in offers:
-        result[offer[0]] = {"owner": offer[1], "itemId": offer[2], "originalAmount": offer[3], "currentAmount": offer[4], "price": offer[5], "status": offer[6]}
+        result[offer[0]] = {"owner": offer[1], "nftId": offer[2], "originalAmount": offer[3], "currentAmount": offer[4], "price": offer[5], "status": offer[6]}
     return result
     
 def getOpenOffers():
     result = {}
-    offers = db.session.query(Offer.id, Offer.owner, Offer.itemId, Offer.originalAmount, Offer.currentAmount, Offer.price, Offer.status).filter_by(status="Open")
+    offers = db.session.query(Offer.id, Offer.owner, Offer.nftId, Offer.originalAmount, Offer.currentAmount, Offer.price, Offer.status).filter_by(status="Open")
     for offer in offers:
-        result[offer[0]] = {"owner": offer[1], "itemId": offer[2], "originalAmount": offer[3], "currentAmount": offer[4], "price": offer[5], "status": offer[6]}
+        result[offer[0]] = {"owner": offer[1], "nftId": offer[2], "originalAmount": offer[3], "currentAmount": offer[4], "price": offer[5], "status": offer[6]}
     return result
 
 def updateAllTreesData():
-    treesQuantity = TreeContract.functions.treesQuantity().call()
+    treesQuantity = TreeContract.functions.getTreeQuantities().call()
     for i in range(treesQuantity):
         try:
             newOwner = TreeContract.functions.ownerOf(i).call()
@@ -136,17 +136,12 @@ def updateAllTreesData():
                 updateTreeData(i, newOwner)
 
 def getOfferData(offerId):
-    owner = MarketplaceContract.functions.offerOwner(offerId).call()
-    itemId = MarketplaceContract.functions.offerItemId(offerId).call()
-    originalAmount = MarketplaceContract.functions.offerOriginalAmount(offerId).call()
-    currentAmount = MarketplaceContract.functions.offerCurrentAmount(offerId).call()
-    price = MarketplaceContract.functions.offerPrice(offerId).call()
-    status = MarketplaceContract.functions.offerStatus(offerId).call()
-    return {"offerId": offerId, "owner": owner,"itemId": itemId,"originalAmount": originalAmount,"currentAmount": currentAmount,"price": price,"status": status,}
+    offer = MarketplaceContract.functions.getOffer(offerId).call()
+    return {"offerId": offerId, "owner": offer[0], "nft": offer[1], "nftId": offer[2],"originalAmount": offer[3],"currentAmount": offer[4],"price": offer[5],"status": offer[6]}
 
 
 def updateAllOffersData():
-    offersQuantity = MarketplaceContract.functions.offersQuantity().call()
+    offersQuantity = MarketplaceContract.functions.getOfferQuantities().call()
     for i in range(offersQuantity):
         try:
             data = getOfferData(i)
@@ -154,9 +149,9 @@ def updateAllOffersData():
             break
         exists = db.session.query(Offer.id).filter_by(id=i).first() is not None
         if exists == False:
-            addOfferData(i, data["owner"], data["itemId"], data["originalAmount"], data["currentAmount"], data["price"], data["status"])
+            addOfferData(i, data["owner"], data["nftId"], data["originalAmount"], data["currentAmount"], data["price"], data["status"])
         else:
-            updateOfferData(i, data["owner"], data["itemId"], data["originalAmount"], data["currentAmount"], data["price"], data["status"])
+            updateOfferData(i, data["owner"], data["nftId"], data["originalAmount"], data["currentAmount"], data["price"], data["status"])
 
 def handle_transfer(event):
     print(event)
@@ -172,17 +167,13 @@ def handle_transfer(event):
 def handle_offer(event):
     print(event)
     offerId = event["args"]["offerId"]
-    owner = event["args"]["owner"]
-    itemId = event["args"]["itemId"]
-    originalAmount = event["args"]["originalAmount"]
-    currentAmount = event["args"]["currentAmount"]
-    price = event["args"]["price"]
-    status = event["args"]["status"]
+    data = getOfferData(offerId)
+
     exists = db.session.query(Offer.id).filter_by(id=offerId).first() is not None
     if exists == False:
-        addOfferData(offerId, owner, itemId, originalAmount, currentAmount, price, status)
+        addOfferData(offerId, data["owner"], data["nftId"], data["originalAmount"], data["currentAmount"], data["price"], data["status"])
     else:
-        updateOfferData(offerId, owner, itemId, originalAmount, currentAmount, price, status)
+        updateOfferData(offerId, data["owner"], data["nftId"], data["originalAmount"], data["currentAmount"], data["price"], data["status"])
     print("event Handled, offerId: ", offerId)
         
 def transferEvent():
@@ -193,7 +184,7 @@ def transferEvent():
 
 def offerEvent():
     latestBlock = w3.eth.block_number
-    offerUpdated_filter = MarketplaceContract.events.OfferUpdated.createFilter(fromBlock=latestBlock)
+    offerUpdated_filter = MarketplaceContract.events.OfferStatusChange.createFilter(fromBlock=latestBlock)
     for event in offerUpdated_filter.get_all_entries():
         handle_offer(event)
 
